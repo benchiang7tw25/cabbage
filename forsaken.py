@@ -46,7 +46,7 @@ stars = [(random.randint(0, 3000), random.randint(20, 180), random.randint(1,3))
 barrier = pygame.Rect(50, HEIGHT-150, 20, 100)
 
 # Game constants
-GRAVITY = 0.6
+GRAVITY = 0.65
 NOOB_MAX_HP = 100
 GAME_DURATION = 180  # seconds to survive
 
