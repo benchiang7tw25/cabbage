@@ -4,44 +4,68 @@
 - Python 3.9+
 - pygame (`pip install pygame`)
 
-## How to Run
-- From the repo root:
-  - `python cabbage/forsaken.py`
+## Run
+From repo root:
+- `python cabbage/forsaken.py`
+
+## Round Flow
+- Title: press Enter, then choose the killer (Left/Right + Enter)
+- 3-second intro shows the killer
+- Game: survive, complete generators, or eliminate Noob
+- Game Over: click Rematch or press R to restart
+
+## Map
+- Three full-width floors (ground, mid, top)
+- Portals only way between floors (ends and near-ends)
+  - Enter a portal to teleport beside the paired portal, placed on the floor
+  - 0.6s cooldown prevents instant re-entry
+- Houses on platforms; house windows light when Noob is inside (killer hint)
+
+## Generators (Puzzle)
+- Approach a generator (brown box with green slider)
+- Press G to start a 3-key sequence (from A/S/D/W/Q/E)
+- Type the sequence correctly to complete (-10s timer)
+- Wrong key resets that generator’s sequence attempt
+
+## Split Screen
+- Always on: left view follows Noob, right view follows Killer
+- Central divider; UI overlays on top
 
 ## Controls
-- Noob (Player 1)
-  - Move: A / D
-  - Jump: W
-  - Q: Speed boost (x2) — 5s, 10s cooldown
-  - E: Invisibility — 5s, 10s cooldown
-  - R: Fortify (half speed, take 10% damage, grey overlay) — 5s, 30s cooldown
-- CoolKid (Player 2 / Boss)
-  - Move: Arrow Left / Right
-  - Jump: Arrow Up
-  - / (slash): Dash — lasts up to 4s, 40s cooldown; on hit stops dash, deals 40 damage, plays explosion
-  - , (comma): Sword slash — short range, 1s cooldown
-  - M: Spawn up to 3 clones (auto-chase and slash; despawn after 15s)
+Noob (Player 1)
+- Move A/D, Jump W
+- Q: Speed boost x2 (5s, 10s cd)
+- E: Invisibility (5s, 10s cd)
+- R: Fortify (half speed, take 10% damage, 5s, 30s cd)
+- G: Start generator puzzle when close
 
-## Objective
-- Survive until the timer reaches 0 (Noob wins), or drop your opponent's HP to 0.
-- If CoolKid falls into the void, Noob immediately wins.
-- Win screen includes confetti:
-  - CoolKid wins: red confetti
-  - Noob wins: blue/green/yellow confetti
+CoolKid (Killer)
+- Move ←/→, Jump ↑
+- , (comma): Slash (1s cd)
+- / (slash): Dash (up to 4s, 40s cd). Hitting Noob stops dash and deals 40 dmg + explosion FX
+- M: Spawn up to 3 clones (10s cd)
 
-## UI
-- Top center: survive timer
-- Top left: Noob HP bar (fixed on screen)
-- Cooldowns: colored ticks above characters
+1x1x1x1 (Killer)
+- Move ←/→, Jump ↑
+- , (comma): Entanglement — small flying stun blade (5s stun) (short cd)
+- . (period): Melee slash like CoolKid (1s cd)
+- / (slash): Mass Infection — fast spinning blade projectile (damage, short cd)
+- M: Arrow Ping — green arrow points toward Noob (15s, 40s cd)
 
-## World & Camera
-- Theme: Night circus with stars, rainbow tents, and market stalls
-- Platforming: multiple striped platforms; jumping height boosted 1.5x
-- Dynamic camera: follows Noob; zooms out and re-centers so CoolKid stays visible before getting cut off
+## Audio (CoolKid)
+Place audio files (if you want music/SFX):
+- `cabbage/assets/sounds/coolkid/`
+  - `theme_ready_or_not.mp3` (BGM; loops)
+  - `slash.ogg`, `dash_start.ogg`, `dash_hit_explosion.ogg`, `clone_spawn.ogg` (SFX)
+
+Helper to download placeholders/BGM links:
+- `python cabbage/tools/download_coolkid_audio.py`
 
 ## Tips
-- Noob: Use R before big hits; Q to cross gaps; E to avoid slashes
-- CoolKid: Dash to close distance, time it to trigger the 40-damage explosion; use clones to pressure Noob
+- Noob: use R before big hits; Q to reach gaps; E to avoid slashes
+- CoolKid: time dash to land the 40-dmg hit; clones to pressure
+- 1x1x1x1: use long-range blade (/) to control lanes; ping (M) to track Noob
 
 ## Troubleshooting
-- If window is very small or zoom changes feel abrupt, consider adjusting `margin`, `view_scale` min, or gravity/jump values in `forsaken.py`.
+- No audio: verify files are in `cabbage/assets/sounds/coolkid`, and try `pygame.mixer.init` defaults (already enabled). If needed, set `SDL_AUDIODRIVER=directsound` on Windows.
+- Split screen squished: the game renders native half-width panes (no scaling). Ensure window is large enough (1100x700 default).
