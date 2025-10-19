@@ -832,10 +832,10 @@ else:
 
 # Survivors already spawned with random positions!
 # Display survivor team composition
-print(f"\n🎮 SURVIVOR TEAM ASSEMBLED! 🎮")
+print(f"\nSURVIVOR TEAM ASSEMBLED!")
 for i, survivor in enumerate(survivors):
     print(f"  {i+1}. {survivor.survivor_type} - HP: {survivor.hp}, Speed: {survivor.base_speed}")
-print(f"\n💀 Facing: {selected_killer} 💀\n")
+print(f"\nFacing: {selected_killer}\n")
 
 # Round intro (3s) showing killer face and text
 intro_until = time.time() + 3.0
@@ -1127,6 +1127,47 @@ while running:
     # Only main character is player controlled
     if main_character and main_character.hp > 0:
         main_character.move_input(keys, pygame.K_a, pygame.K_d, pygame.K_w, barriers)
+
+    # NPC AI behavior - make NPCs avoid the killer and move around
+    for npc in npcs:
+        if npc.hp > 0:
+            # Simple AI: move away from killer and towards main character
+            killer_distance = abs(npc.x - coolkid.x)
+            main_char_distance = abs(npc.x - main_character.x) if main_character else 0
+            
+            # If killer is too close, run away
+            if killer_distance < 200:
+                if coolkid.x < npc.x:
+                    # Killer is to the left, move right
+                    npc.x += npc.speed
+                    npc.facing_dir = 1
+                else:
+                    # Killer is to the right, move left
+                    npc.x -= npc.speed
+                    npc.facing_dir = -1
+            # If main character is far away, try to follow
+            elif main_char_distance > 300 and main_character:
+                if main_character.x < npc.x:
+                    # Main character is to the left, move left
+                    npc.x -= npc.speed * 0.7
+                    npc.facing_dir = -1
+                else:
+                    # Main character is to the right, move right
+                    npc.x += npc.speed * 0.7
+                    npc.facing_dir = 1
+            # Random movement if not too close to killer
+            elif random.random() < 0.02:  # 2% chance each frame
+                if random.random() < 0.5:
+                    npc.x += npc.speed * 0.5
+                    npc.facing_dir = 1
+                else:
+                    npc.x -= npc.speed * 0.5
+                    npc.facing_dir = -1
+            
+            # Random jumping
+            if npc.on_ground and random.random() < 0.01:  # 1% chance each frame
+                npc.vel_y = -15
+                npc.on_ground = False
 
     # CoolKid controls: arrows ; / is K_SLASH, comma is K_COMMA, m spawn clone
     coolkid.move_input(keys, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, barriers)
