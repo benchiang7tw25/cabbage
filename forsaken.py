@@ -190,6 +190,24 @@ class Player:
         # last frame y for top-landing detection
         self.last_y = y
         self.variant = "CoolKid"  # or "1x1x1x1"
+        
+        # New attributes for survivor abilities
+        self.last_move_time = time.time()
+        self.fried_chicken_charges = 2  # For Shedletsky
+        self.punch_channeling = False
+        self.punch_channel_end = 0.0
+        self.dagger_active = False
+        self.dagger_end = 0.0
+        self.crouching = False
+        self.respawn_beacon = None
+        self.weakness_stacks = 0
+        self.weakness_until = 0.0
+        self.sentry_construction_end = 0.0
+        self.dispenser_construction_end = 0.0
+        self.tripwire_active = False
+        self.tripwire_end = 0.0
+        self.tripwire_location = None
+        self.movement_type = 0  # For 007n7 clones: 0=aimless, 1=pathfinding, 2=cursor
 
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
@@ -229,6 +247,8 @@ class Player:
         # don't move if stunned
         if time.time() < self.stun_until:
             return
+        
+        moved = False
         if keys[left_key]:
             # check all barriers
             can_move_left = True
@@ -240,6 +260,7 @@ class Player:
             if can_move_left:
                 self.x -= self.speed
                 self.facing_dir = -1
+                moved = True
         if keys[right_key]:
             # check all barriers
             can_move_right = True
@@ -251,9 +272,15 @@ class Player:
             if can_move_right:
                 self.x += self.speed
                 self.facing_dir = 1
+                moved = True
         if keys[jump_key] and self.on_ground:
             self.vel_y = -18
             self.on_ground = False
+            moved = True
+        
+        # Update last_move_time if player moved
+        if moved:
+            self.last_move_time = time.time()
 
     def draw(self, offset_x, offset_y=0):
         # draw player; if survivor, use unique appearance based on type
@@ -830,6 +857,11 @@ else:
     coolkid.base_speed = int(coolkid.base_speed * 0.85) if isinstance(coolkid.base_speed, int) else coolkid.base_speed * 0.85
     coolkid.speed = coolkid.base_speed
 
+# Add missing attributes to coolkid
+coolkid.helpless_until = 0.0
+coolkid.subspace_until = 0.0
+coolkid.speed_boost_until = 0.0
+
 # Survivors already spawned with random positions!
 # Display survivor team composition
 print(f"\nSURVIVOR TEAM ASSEMBLED!")
@@ -1135,34 +1167,52 @@ while running:
             killer_distance = abs(npc.x - coolkid.x)
             main_char_distance = abs(npc.x - main_character.x) if main_character else 0
             
+            # Store original position for collision checking
+            old_x = npc.x
+            moved = False
+            
             # If killer is too close, run away
             if killer_distance < 200:
                 if coolkid.x < npc.x:
                     # Killer is to the left, move right
                     npc.x += npc.speed
                     npc.facing_dir = 1
+                    moved = True
                 else:
                     # Killer is to the right, move left
                     npc.x -= npc.speed
                     npc.facing_dir = -1
+                    moved = True
             # If main character is far away, try to follow
             elif main_char_distance > 300 and main_character:
                 if main_character.x < npc.x:
                     # Main character is to the left, move left
                     npc.x -= npc.speed * 0.7
                     npc.facing_dir = -1
+                    moved = True
                 else:
                     # Main character is to the right, move right
                     npc.x += npc.speed * 0.7
                     npc.facing_dir = 1
+                    moved = True
             # Random movement if not too close to killer
             elif random.random() < 0.02:  # 2% chance each frame
                 if random.random() < 0.5:
                     npc.x += npc.speed * 0.5
                     npc.facing_dir = 1
+                    moved = True
                 else:
                     npc.x -= npc.speed * 0.5
                     npc.facing_dir = -1
+                    moved = True
+            
+            # Check for collision with barriers and revert if needed
+            if moved:
+                npc_rect = pygame.Rect(npc.x, npc.y, 30, 30)
+                for barrier in barriers:
+                    if npc_rect.colliderect(barrier):
+                        npc.x = old_x  # Revert movement
+                        break
             
             # Random jumping
             if npc.on_ground and random.random() < 0.01:  # 1% chance each frame
@@ -1176,22 +1226,220 @@ while running:
     noob_move_dir = (-1 if keys[pygame.K_a] else 0) + (1 if keys[pygame.K_d] else 0)
     coolkid_move_dir = (-1 if keys[pygame.K_LEFT] else 0) + (1 if keys[pygame.K_RIGHT] else 0)
 
-    # Main character abilities - Q (speed), E (invis), R (reduce), T (special)
+    # Main character abilities - Z, X, C, V keys based on survivor type
     if main_character and main_character.hp > 0:
-        if keys[pygame.K_q] and now > cooldowns["noob_speed"]:
-            main_character.speed = main_character.base_speed * 2
-            noob_speed_until = now + 5.0
-            cooldowns["noob_speed"] = now + 10.0
+        survivor = main_character
+        survivor_type = getattr(survivor, 'survivor_type', 'Noob')
+        survivor_id = id(survivor)
 
-        if keys[pygame.K_e] and now > cooldowns["noob_invis"]:
-            main_character.invisible = True
-            noob_invis_until = now + 5.0
-            cooldowns["noob_invis"] = now + 10.0
+        # 007n7 abilities: Clone (Z), c00lgui (X), Inject (C)
+        if survivor_type == "007n7":
+            if keys[pygame.K_z] and now > cooldowns.get(f"clone_{survivor_id}", 0):
+                # Clone: Create a clone that lives for 10 seconds
+                clone = Player(survivor.x + 50, survivor.y, is_noob=True)
+                clone.survivor_type = "007n7"
+                clone.type_data = SURVIVOR_TYPES["007n7"]
+                clone.base_speed = clone.type_data["speed"]
+                clone.speed = clone.base_speed
+                clone.hp = 50  # Clone has less HP
+                clone.max_hp = 50
+                clone.invisible = True
+                clone.special_effect_until = now + 4.0  # Invisible for 4 seconds
+                clone.clone_until = now + 10.0  # Clone lives for 10 seconds
+                survivors.append(clone)
+                cooldowns[f"clone_{survivor_id}"] = now + 15.0
 
-        if keys[pygame.K_r] and now > cooldowns["noob_reduce"]:
-            main_character.speed = max(1, main_character.base_speed // 2) if isinstance(main_character.base_speed, int) else main_character.base_speed * 0.5
-            noob_reduce_until = now + 5.0
-            cooldowns["noob_reduce"] = now + 30.0
+            if keys[pygame.K_x] and now > cooldowns.get(f"c00lgui_{survivor_id}", 0):
+                # c00lgui: After being idle for 6 seconds, teleport to the furthest survivor spawn
+                if now - survivor.last_move_time > 6.0:  # Check if idle for 6 seconds
+                    # Find furthest survivor spawn
+                    furthest_spawn = max(SURVIVOR_SPAWNS, key=lambda spawn: abs(spawn[0] - survivor.x))
+                    survivor.x, survivor.y = furthest_spawn
+                    cooldowns[f"c00lgui_{survivor_id}"] = now + 20.0
+
+            if keys[pygame.K_c] and now > cooldowns.get(f"inject_{survivor_id}", 0):
+                # Inject: Changes the clone's movement type
+                for clone_info in clones:
+                    if clone_info["p"].survivor_type == "007n7":
+                        # Random movement type: 0=aimless, 1=pathfinding, 2=cursor
+                        clone_info["p"].movement_type = random.randint(0, 2)
+                cooldowns[f"inject_{survivor_id}"] = now + 10.0
+
+        # Shedletsky abilities: Slash (Z), Fried Chicken (X)
+        elif survivor_type == "Shedletsky":
+            if keys[pygame.K_z] and now > cooldowns.get(f"slash_{survivor_id}", 0):
+                # Slash: Deal 30 damage and stun the killer for 3 seconds while gaining resistance for 0.575
+                if coolkid.rect().colliderect(survivor.rect()):
+                    coolkid.hp -= 30
+                    coolkid.stun_until = now + 3.0
+                    survivor.shield_active = True
+                    survivor.special_effect_until = now + 0.575
+                cooldowns[f"slash_{survivor_id}"] = now + 8.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"fried_chicken_{survivor_id}", 0):
+                # Fried Chicken: Restores 35 HP in 10 seconds (2 charges)
+                if survivor.fried_chicken_charges > 0:
+                    survivor.hp = min(survivor.max_hp, survivor.hp + 35)
+                    survivor.fried_chicken_charges -= 1
+                    cooldowns[f"fried_chicken_{survivor_id}"] = now + 15.0
+
+        # Guest 1337 abilities: Block (Z), Charge (X), Punch (C)
+        elif survivor_type == "Guest 1337":
+            if keys[pygame.K_z] and now > cooldowns.get(f"block_{survivor_id}", 0):
+                # Block: Gain resistance for 1 second, then speed boost for 3 seconds
+                survivor.shield_active = True
+                survivor.special_effect_until = now + 1.0
+                survivor.speed_boost_until = now + 4.0  # Speed boost after shield
+                cooldowns[f"block_{survivor_id}"] = now + 12.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"charge_{survivor_id}", 0):
+                # Charge: Dash forward for 1.5 seconds, and if the killer is hit, their abilities are locked for 1.25 seconds
+                survivor.dash_active = True
+                survivor.dash_end = now + 1.5
+                survivor.dash_direction = survivor.facing_dir
+                cooldowns[f"charge_{survivor_id}"] = now + 10.0
+
+            if keys[pygame.K_c] and now > cooldowns.get(f"punch_{survivor_id}", 0):
+                # Punch: Channel a fist for 0.8 seconds and stun a killer for 2 seconds
+                survivor.punch_channeling = True
+                survivor.punch_channel_end = now + 0.8
+                cooldowns[f"punch_{survivor_id}"] = now + 15.0
+
+        # Two Time abilities: Sacrificial Dagger (Z), Crouch (X), Ritual (C)
+        elif survivor_type == "Two Time":
+            if keys[pygame.K_z] and now > cooldowns.get(f"dagger_{survivor_id}", 0):
+                # Sacrificial Dagger: Gain resistance for 0.7 seconds, and if the dagger hits the killer, it deals 25 damage
+                survivor.shield_active = True
+                survivor.special_effect_until = now + 0.7
+                survivor.dagger_active = True
+                survivor.dagger_end = now + 0.7
+                cooldowns[f"dagger_{survivor_id}"] = now + 8.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"crouch_{survivor_id}", 0):
+                # Crouch: Perform crouch, but slower movement speed
+                survivor.crouching = True
+                survivor.speed = survivor.base_speed * 0.5
+                cooldowns[f"crouch_{survivor_id}"] = now + 5.0
+
+            if keys[pygame.K_c] and now > cooldowns.get(f"ritual_{survivor_id}", 0):
+                # Ritual: Carve a mark on the ground that acts as the respawn beacon
+                survivor.respawn_beacon = (survivor.x, survivor.y)
+                cooldowns[f"ritual_{survivor_id}"] = now + 30.0
+
+        # Chance Forsaken abilities: Coil Flip (Z), One Shot (X), Reroll (C), Hat Fix (V)
+        elif survivor_type == "Chance Forsaken":
+            if keys[pygame.K_z] and now > cooldowns.get(f"coin_flip_{survivor_id}", 0):
+                # Coil Flip: Flip the coin. If it lands on heads, gain one charge for all abilities, and if it lands on tails, gain a stack of weakness
+                if random.random() < 0.5:  # Heads
+                    # Gain one charge for all abilities (reduce cooldowns)
+                    for key in cooldowns:
+                        if key.startswith(f"{survivor_id}"):
+                            cooldowns[key] = max(0, cooldowns[key] - 5.0)
+                else:  # Tails
+                    # Gain a stack of weakness
+                    survivor.weakness_stacks = getattr(survivor, 'weakness_stacks', 0) + 1
+                    survivor.weakness_until = now + 10.0
+                cooldowns[f"coin_flip_{survivor_id}"] = now + 8.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"one_shot_{survivor_id}", 0):
+                # One Shot: Unreliable flintlock with 3 outcomes
+                outcome = random.randint(1, 3)
+                if outcome == 1:  # Explode and deal 45 damage
+                    if coolkid.rect().colliderect(survivor.rect()):
+                        coolkid.hp -= 45
+                    cooldowns[f"one_shot_{survivor_id}"] = now + 60.0  # Disable ability
+                elif outcome == 2:  # Fail to fire
+                    cooldowns[f"one_shot_{survivor_id}"] = now + 20.0  # Force wait
+                else:  # Successfully shoot and stun
+                    distance = abs(coolkid.x - survivor.x)
+                    stun_duration = max(1, min(4, 4 - distance // 90))
+                    coolkid.stun_until = now + stun_duration
+                    cooldowns[f"one_shot_{survivor_id}"] = now + 15.0
+
+            if keys[pygame.K_c] and now > cooldowns.get(f"reroll_{survivor_id}", 0):
+                # Reroll: Reroll the value of your max health
+                new_max_hp = random.randint(70, 90)
+                survivor.max_hp = new_max_hp
+                survivor.hp = new_max_hp
+                cooldowns[f"reroll_{survivor_id}"] = now + 25.0
+
+            if keys[pygame.K_v] and now > cooldowns.get(f"hat_fix_{survivor_id}", 0):
+                # Hat Fix: Revert all weakness stacks to a single weakness debuff
+                survivor.weakness_stacks = 1
+                survivor.weakness_until = now + 10.0
+                cooldowns[f"hat_fix_{survivor_id}"] = now + 20.0
+
+        # Elliot abilities: Pizza Throw (Z), Rush Hour (X)
+        elif survivor_type == "Elliot":
+            if keys[pygame.K_z] and now > cooldowns.get(f"pizza_throw_{survivor_id}", 0):
+                # Pizza Throw: Throw a pizza to heal survivors for 35 HP
+                for other_survivor in survivors:
+                    if other_survivor != survivor and other_survivor.hp > 0:
+                        distance = abs(other_survivor.x - survivor.x)
+                        if distance < 100:  # Within range
+                            other_survivor.hp = min(other_survivor.max_hp, other_survivor.hp + 35)
+                cooldowns[f"pizza_throw_{survivor_id}"] = now + 12.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"rush_hour_{survivor_id}", 0):
+                # Rush Hour: Grants a speed boost for 3 seconds
+                survivor.speed_boost_until = now + 3.0
+                survivor.speed = survivor.base_speed * 1.5
+                cooldowns[f"rush_hour_{survivor_id}"] = now + 15.0
+
+        # Dusekkar abilities: Spawn Protection (Z), Plasma Beam (X)
+        elif survivor_type == "Dusekkar":
+            if keys[pygame.K_z] and now > cooldowns.get(f"spawn_protection_{survivor_id}", 0):
+                # Spawn Protection: Give an ally a shield for 3.5 seconds
+                for other_survivor in survivors:
+                    if other_survivor != survivor and other_survivor.hp > 0:
+                        other_survivor.shield_active = True
+                        other_survivor.special_effect_until = now + 3.5
+                        break
+                cooldowns[f"spawn_protection_{survivor_id}"] = now + 20.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"plasma_beam_{survivor_id}", 0):
+                # Plasma Beam: Cast a beam that slows killers for 3 seconds or gives a speed boost to survivors for 4 seconds
+                if random.random() < 0.5:  # Slow killer
+                    coolkid.speed_boost_until = now + 3.0
+                    coolkid.speed = coolkid.base_speed * 0.5
+                else:  # Speed boost survivors
+                    for other_survivor in survivors:
+                        other_survivor.speed_boost_until = now + 4.0
+                        other_survivor.speed = other_survivor.base_speed * 1.5
+                cooldowns[f"plasma_beam_{survivor_id}"] = now + 18.0
+
+        # Builderman abilities: Sentry Construction (Z), Dispenser Construction (X)
+        elif survivor_type == "Builderman":
+            if keys[pygame.K_z] and now > cooldowns.get(f"sentry_{survivor_id}", 0):
+                # Sentry Construction: Receive weakness for 2 seconds before crafting a Sentry
+                survivor.weakness_until = now + 2.0
+                survivor.weakness_stacks = 1
+                # Create sentry after 2 seconds
+                survivor.sentry_construction_end = now + 2.0
+                cooldowns[f"sentry_{survivor_id}"] = now + 25.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"dispenser_{survivor_id}", 0):
+                # Dispenser Construction: Receive weakness for 2 seconds before crafting a Dispenser
+                survivor.weakness_until = now + 2.0
+                survivor.weakness_stacks = 1
+                # Create dispenser after 2 seconds
+                survivor.dispenser_construction_end = now + 2.0
+                cooldowns[f"dispenser_{survivor_id}"] = now + 20.0
+
+        # Taph abilities: Tripwire (Z), Subspace Tripmine (X)
+        elif survivor_type == "Taph":
+            if keys[pygame.K_z] and now > cooldowns.get(f"tripwire_{survivor_id}", 0):
+                # Tripwire: Place a tripwire that weakens the killer and alerts survivors about their location
+                survivor.tripwire_active = True
+                survivor.tripwire_end = now + 15.0
+                survivor.tripwire_location = (survivor.x, survivor.y)
+                cooldowns[f"tripwire_{survivor_id}"] = now + 12.0
+
+            if keys[pygame.K_x] and now > cooldowns.get(f"subspace_{survivor_id}", 0):
+                # Subspace Tripmine: Killer gets helpless and subspaced buffs for 5 seconds
+                coolkid.helpless_until = now + 5.0
+                coolkid.subspace_until = now + 5.0
+                cooldowns[f"subspace_{survivor_id}"] = now + 30.0
 
     # NEW: Survivor Special Abilities (T key) - Only for main character
     if keys[pygame.K_t] and main_character and main_character.hp > 0:
@@ -1866,7 +2114,7 @@ while running:
         hp_text = FONT.render(f"{survivor_type}: {survivor.hp}/{survivor.max_hp}", True, WHITE)
         win.blit(hp_text, (ui_bar_x, ui_bar_y - 20))
 
-    # check win/lose
+    # check win/lose 
     game_over = False
     winner = None
     alive_survivors = [s for s in survivors if s.hp > 0]
